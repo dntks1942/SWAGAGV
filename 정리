@@ -1,0 +1,25 @@
+
+****** DEVELOPER GUIDE ***********
+openTCS kernel 포트 55555
+>> config 에서 수정가능
+
+1. 호스트(?)에서 새로운 TCP/IP 연결을 생성
+2. 호스트에서 XML telegram을 보낸다 telegram은 생성될 명령을 설명하고 batch file을 확인한다?
+3. 호스트가 output stream을 종료하거나 연속적인 line breaking을 보낸다(다음 데이터가 없다는 것을 알리는 용도)
+
+4. openTCS가 호스트에서 온 telegram을 해석한다. 그리고 그에 맞는 명령을 생성하고 실행한다.
+5. openTCS가 확인용 telegram을 보낸다.
+6. openTCS가 연결을 종료한다.
+
+하나의 SET만 한번에 주고받는다.
+
+***************************************
+
+********* Example Guide ***************
+1. telegram은 start marker로 시작한다.
+2. 그 뒤에 사이즈 byte가 나온다.
+3. 사이즈 byte 다음에 type byte
+4. 실제 payload 이전에 identifier가 있다.
+5. identifier는 특정한 request를 확인할 수 있게 하고 이전 request와 구분되어야 한다.
+6. payload 이후에는 checksum byte가 추가되어 byte sequence가 정상적인지 확인한다.
+7. 마지막으로 end marker로 끝낸다.

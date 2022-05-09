@@ -1,0 +1,10 @@
+build
+.gradle
+config
+gradle
+.classpath
+.project
+build.gradle
+gradlew
+*.gradle
+*.sh
