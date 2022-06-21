@@ -112,10 +112,16 @@ public class RealAGVDemoCommAdapter
   //직접 추가한 변수
   private boolean initialized;
   private final Vehicle vehicle;
+  
+  // localhost
   static String ip = "127.0.0.1";
-  static String agvip = "192.168.0.1";  //
+  // 1번째 agv 주소
+  static String agvip = "192.168.0.1";
+  // 각각의 agv 주소를 주기위해서 (ex> 192.168.0.10 --> 192.168.0.11 -> .....)
   static char totalsuffix = '0' - 1;
+  // 각각의 agv에 정보가 localhost가 보낸 port로 온다. port를 구분하기 위해서
   static int totalportorder = 0;
+  
   private char suffix;
   private int portorder;
   boolean ipcheck;
@@ -124,7 +130,7 @@ public class RealAGVDemoCommAdapter
   private CyclicTask demoTask;
   boolean canChange = true;
 
- 
+
   /**
    * Creates a new instance.
    *
@@ -133,6 +139,7 @@ public class RealAGVDemoCommAdapter
    * @param componentsFactory The components factory.
    * @param kernelExecutor The kernel's executor service.
    */
+  // constructor
   @Inject
   public RealAGVDemoCommAdapter(@Assisted Vehicle vehicle,
                             OrderMapper orderMapper,
@@ -143,10 +150,11 @@ public class RealAGVDemoCommAdapter
     this.componentsFactory = requireNonNull(componentsFactory, "componentsFactory");
     this.kernelExecutor = requireNonNull(kernelExecutor, "kernelExecutor");
     this.vehicle = requireNonNull(vehicle, "vehicle");
-    totalsuffix++;
-    totalportorder++;
-    suffix = totalsuffix;
-    portorder = totalportorder;
+    totalsuffix++; // total suffix증가 시켜서 각 adapter마다 다른 주소값 가지도록
+    totalportorder++; // port number을 증가 시켜서 각 adapter마다 다른 포트번호를 가지도록
+    suffix = totalsuffix; // totalsuffix는 static이기에 suffix에 증가시킨 값 저장
+    portorder = totalportorder; // 위와 동일
+    
     LOG.info(agvip + suffix);
     LOG.info("port: " + portorder);
   }
@@ -615,6 +623,7 @@ public synchronized void enable() {
                     StateResponse.TELEGRAM_LENGTH);
   }
   
+  // 초기 설정을 위한 값 전송 (acs -> agv)
   public class PrepareThread extends Thread {
       public void run() {
           int cnt=0;
@@ -721,9 +730,11 @@ public synchronized void enable() {
       }
   }
   
+  // agv에서 온 message를 받는 thread
   public class MessageThread extends Thread {
       public void run() {
               try {
+            	  // localhost가 data를 보내는 port로 socket연결
                   DatagramSocket ds = new DatagramSocket(4000 + portorder);
                   while(true){
                        byte[] data = new byte[14];
@@ -732,14 +743,15 @@ public synchronized void enable() {
                        //DatagramPacket dp2 = new DatagramPacket(data2,data2.length);
                        LOG.info("agv 주소: " + agvip + suffix);
                        LOG.info("수신할 포트 : " + (4000 + portorder));
-                       ds.receive(dp);
+                       ds.receive(dp); // 14byte짜리 data를 지정된 port로 부터 receive
                        //ds.receive(dp2);
-                       ip = dp.getAddress().getHostAddress();
-                       String temp = byteArrayToHexaString(dp.getData());
+                       ip = dp.getAddress().getHostAddress(); // ip는 localhost일껄??
+                       String temp = byteArrayToHexaString(dp.getData()); // dp로 받은 datafmf hexa 형태로 저장
                        if(temp != null) {
                            recv = temp;
                        }
-                       ipcheck = ipIdentify(ip);
+                       
+                       ipcheck = ipIdentify(ip); // ipcheck false일텐디?
                        LOG.info("AGV에서 온 메시지 : " + recv);
                   }    
               }
@@ -747,18 +759,20 @@ public synchronized void enable() {
                   e.printStackTrace();
               }  
       }
+      // 
       public String byteArrayToHexaString(byte[] bytes) {
           StringBuilder builder = new StringBuilder();
           for(byte data : bytes) {
               builder.append(String.format("%02X ", data));
           }
-          if(builder.charAt(0)  == 'D') {
+          if(builder.charAt(0)  == 'D') { // 1101xxxxxx...이면 null? 왜???
               return null;
           }
           return builder.toString();
       }
   }
   
+  // agv에서 읽은 data 해석
 public class ReadMessage{
     private String[] msg;
     private ToBinary data1L1;
@@ -827,6 +841,7 @@ public class ReadMessage{
 
 }
 
+// hexa형태의 string을 binary로 string으로 변형시키는 class
 public class ToBinary {
     public ToBinary(String s) {
         hex = s;
@@ -863,47 +878,47 @@ public class ToBinary {
     }
 }
 
-  
+ // demotask 실제 작업을 실행(acs에서 agv로 message 전달)
 private class DemoTask extends CyclicTask {
       private int simAdvanceTime;   
       private Point nextPoint;
       private Point currentPoint;
       private Point previousPoint;
-      private double curAngle;
-      private double nextAngle;
+      //private double curAngle;
+      //private double nextAngle;
       private String finalDest = "1";
       private int battery;
-      private int beforeStepNum = 0;
+      private int beforeStepNum = 0; // 이전 step을 저장
       
       
       private DemoTask() {
-          super(600);
-          curAngle = 90;
+          super(600); // cyclictask(600) --> 0.6초 있다가 반복하도록 설정
+          //curAngle = 90;
       }
       
 @Override
  protected void runActualTask() {
     final MovementCommand curCommand;
     synchronized(RealAGVDemoCommAdapter.this) {
-        curCommand = getSentQueue().peek();
+        curCommand = getSentQueue().peek(); // sentqueue의 front를 가져온다
         if(curCommand == null) {
             Uninterruptibles.sleepUninterruptibly(ADVANCE_TIME, TimeUnit.MILLISECONDS);
         } // 커맨드가 null일 때.
         else { // 커맨드가 있을 때.
             LOG.info("current Location : {} ",curCommand.getFinalDestinationLocation().getName());
-            if(canChange){
-                canChange = false;
+            if(canChange){ // canchange는 왜?? 
+                canChange = false; // 
                 if("Location-0001".equals(curCommand.getFinalDestinationLocation().getName())){
-                    goLocat1();
+                    goLocat1(); // location 1으로 가면 goLocat1()
                 }
                 else if("Location-0002".equals(curCommand.getFinalDestinationLocation().getName())){
-                    goLocat2();
+                    goLocat2(); // location 2으로 가면 goLocat2()
                 }
                 else if("Location-0003".equals(curCommand.getFinalDestinationLocation().getName())) {
-                    goLocat3();
+                    goLocat3(); // location 3으로 가면 goLocat3()
                 }
                 else if("Location-0004".equals(curCommand.getFinalDestinationLocation().getName())) {
-                    goLocat4();
+                    goLocat4(); // location 4으로 가면 goLocat4()
                 }
             }
             else{
@@ -911,6 +926,8 @@ private class DemoTask extends CyclicTask {
             }
             
             final Step curStep = curCommand.getStep();
+            
+            /*  picar code
             int msg;
             // LRF 계산부분
             currentPoint = curStep.getSourcePoint();
@@ -946,8 +963,8 @@ private class DemoTask extends CyclicTask {
                 LOG.info("차량 {} 에 직진 명령을 보냅니다.",getProcessModel().getName());
             }
             //그 다음에 메시지 수신 부분이었음
+            */
             
-
             while(true) {
                 ReadMessage rdmsg = new ReadMessage(recv);
                 battery = rdmsg.getBattery();
