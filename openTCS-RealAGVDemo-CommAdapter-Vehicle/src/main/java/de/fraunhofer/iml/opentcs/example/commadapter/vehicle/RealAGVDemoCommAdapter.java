@@ -880,13 +880,13 @@ public class ToBinary {
 
  // demotask 실제 작업을 실행(acs에서 agv로 message 전달)
 private class DemoTask extends CyclicTask {
-      private int simAdvanceTime;   
+      //private int simAdvanceTime;   
       private Point nextPoint;
       private Point currentPoint;
-      private Point previousPoint;
+      //private Point previousPoint;
       //private double curAngle;
       //private double nextAngle;
-      private String finalDest = "1";
+      //private String finalDest = "1";
       private int battery;
       private int beforeStepNum = 0; // 이전 step을 저장
       
@@ -906,8 +906,8 @@ private class DemoTask extends CyclicTask {
         } // 커맨드가 null일 때.
         else { // 커맨드가 있을 때.
             LOG.info("current Location : {} ",curCommand.getFinalDestinationLocation().getName());
-            if(canChange){ // canchange는 왜?? 
-                canChange = false; // 
+            if(canChange){ // load를 할 수 있는 상태이면
+                canChange = false; // unload없는 추가적인 load를 방지하기 위해서
                 if("Location-0001".equals(curCommand.getFinalDestinationLocation().getName())){
                     goLocat1(); // location 1으로 가면 goLocat1()
                 }
@@ -921,17 +921,14 @@ private class DemoTask extends CyclicTask {
                     goLocat4(); // location 4으로 가면 goLocat4()
                 }
             }
-            else{
-                
-            }
             
             final Step curStep = curCommand.getStep();
-            
+            currentPoint = curStep.getSourcePoint();
+            nextPoint = curStep.getDestinationPoint();
             /*  picar code
             int msg;
             // LRF 계산부분
-            currentPoint = curStep.getSourcePoint();
-            nextPoint = curStep.getDestinationPoint();
+            
             long curPx = currentPoint.getPosition().getX();
             long curPy= currentPoint.getPosition().getY();
             long nxtPx= nextPoint.getPosition().getX();
@@ -965,6 +962,7 @@ private class DemoTask extends CyclicTask {
             //그 다음에 메시지 수신 부분이었음
             */
             
+            // 지속적으로 recv를 가져와서 내용을 읽어서 agv의 상태를 acs에 전달
             while(true) {
                 ReadMessage rdmsg = new ReadMessage(recv);
                 battery = rdmsg.getBattery();
@@ -973,9 +971,10 @@ private class DemoTask extends CyclicTask {
                     beforeStepNum++;
                     LOG.info("차량 {} 이 {} 에 도착하였습니다.",getProcessModel().getName(),curStep.getDestinationPoint().getName());
                     break;
-                    //지금은 맵이 단순해서 직선같은것도 프로그램을 바꾸면서 가기때문에 스텝이 0과 1밖에 없어서
-                    //굳이 beforeStepNum을 증가시키지 않아도 됨. 나중에 맵이 바뀌게 되면 증가시키시면서 업데이트 해야함.
+                    // 지금은 맵이 단순해서 직선같은것도 프로그램을 바꾸면서 가기때문에 스텝이 0과 1밖에 없어서
+                    // 굳이 beforeStepNum을 증가시키지 않아도 됨. 나중에 맵이 바뀌게 되면 증가시키시면서 업데이트 해야함.
                 }
+                // 대기하는 지점을 설정해주었다. (모든 point에서 자동으로 대기 지점을 찾을 수 있도록 변경 필요)
                 if("Point-0004".equals(curStep.getSourcePoint().getName()) || "Point-0005".equals(curStep.getSourcePoint().getName())) {
                     goCommand();
                 }
@@ -995,6 +994,7 @@ private class DemoTask extends CyclicTask {
                 if(curCommand.getOperation().equals("Load cargo")){
                      LOG.info("차량 {} 이 짐을 싣는 중입니다....",getProcessModel().getName());
                      //setInit();
+                     //start 명령을 받을 때 까지 대기
                      while(true){
                          ReadMessage rdmsg = new ReadMessage(recv);
                          if(rdmsg.getStateStart()){
@@ -1008,6 +1008,7 @@ private class DemoTask extends CyclicTask {
                         TimeUnit.SECONDS.sleep(3);
                         beforeStepNum = 0;
                         //setInit();
+                        //load를 할 수 있다.
                         canChange =true;
                     }
                     catch (InterruptedException e) {
@@ -1035,16 +1036,20 @@ private class DemoTask extends CyclicTask {
       }
     } // runActualTask
     
+    // 다음노드를 확인하고 해당 노드가 비어있으면 출발시키는 명령어, testmap에서만 가능한 제한적 명령어 --> 수정필요!!
+    // nextpoint를 어떻게 가져올 것인지 찾아야함... 
     public void goCommand() {
-        while(nextPoint.getOccupyingVehicle() != null) {
+        while(nextPoint.getOccupyingVehicle() != null) { // next point가 free가 아니면 계속 기다림
             LOG.info("--------------------------{} occupying point {}----------------------",nextPoint.getOccupyingVehicle().getName(), nextPoint.getName());
         }
-        try{
+        try{  //free가 되면
             LOG.info("---------Next Point is {} , Current point is {}---------",nextPoint.getName(), currentPoint.getName());
             InetAddress ia = InetAddress.getByName(agvip + (suffix));
             DatagramSocket ds = new DatagramSocket();
-            byte[] goCommand = new java.math.BigInteger("0E0000000A000100D20000000000",16).toByteArray();
+            // 출발 명령어
+            byte[] goCommand = new java.math.BigInteger("0E0000000A000100D20000000000",16).toByteArray(); // AGV 기동 명령
             DatagramPacket dp = new DatagramPacket(goCommand,goCommand.length,ia,3000);
+            // 
             ds.send(dp);
             try {
                 Thread.sleep(100);
@@ -1069,7 +1074,7 @@ private class DemoTask extends CyclicTask {
             byte[] programStepChangeByte = new java.math.BigInteger("0E00000068000100D20000000000",16).toByteArray();
             byte[] programStepStrobeOffByte = new java.math.BigInteger("0E00000008000100D20000000000",16).toByteArray();
             DatagramPacket dp = new DatagramPacket(programStepStrobeOnByte,programStepStrobeOnByte.length,ia,3000);
-            DatagramPacket dp2 = new DatagramPacket(programStepChangeByte,programStepChangeByte.length,ia,3000);
+            DatagramPacket dp2 = new DatagramPacket(programStepChangeByte,programStepChangeByte.length,ia,30400);
             DatagramPacket dp3 = new DatagramPacket(programStepStrobeOffByte,programStepStrobeOffByte.length,ia,3000);
             ds.send(dp);
             try {
@@ -1161,7 +1166,7 @@ private class DemoTask extends CyclicTask {
             e.printStackTrace();
         }
     }
-    public void goLocat4() {
+    public void goLocat4() {  // location4로 가는 함수 -> agv에 location4로 가는 명령어를 보낸다.
         try{
             LocalTime now = LocalTime.now();
             LOG.info("goLocat4: {}",now);
@@ -1195,7 +1200,7 @@ private class DemoTask extends CyclicTask {
             e.printStackTrace();
         }
     }
-    public void setInit() {
+    public void setInit() {  
         try{
             InetAddress ia = InetAddress.getByName(agvip + (suffix));
             DatagramSocket ds = new DatagramSocket();
