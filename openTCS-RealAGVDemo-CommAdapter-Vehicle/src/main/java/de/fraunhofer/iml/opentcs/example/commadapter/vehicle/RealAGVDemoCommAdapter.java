@@ -116,7 +116,7 @@ public class RealAGVDemoCommAdapter
   // localhost
   static String ip = "127.0.0.1";
   // 1번째 agv 주소
-  static String agvip = "192.168.0.1";
+  static String agvip = "192.168.0.20";
   // 각각의 agv 주소를 주기위해서 (ex> 192.168.0.10 --> 192.168.0.11 -> .....)
   static char totalsuffix = '0' - 1;
   // 각각의 agv에 정보가 localhost가 보낸 port로 온다. port를 구분하기 위해서
@@ -129,7 +129,8 @@ public class RealAGVDemoCommAdapter
   private static final int ADVANCE_TIME = 100;
   private CyclicTask demoTask;
   boolean canChange = true;
-
+  boolean isMeidansha = true;
+  int currentLocation = 0;
 
   /**
    * Creates a new instance.
@@ -654,7 +655,7 @@ public synchronized void enable() {
                         e.printStackTrace();
                     }       
           }
-          //setposThread
+          //setposThread(Position)
           while(true){
               ReadMessage rdmsg =new ReadMessage(recv);
               //LOG.info("AGV에서 온 메시지 : " + recv);
@@ -711,7 +712,7 @@ public synchronized void enable() {
           while(true){
               ReadMessage rdmsg =new ReadMessage(recv);
               //LOG.info("AGV에서 온 메시지 : " + recv);
-              if(rdmsg.getStateDriveOn()){
+              if(rdmsg.getStateDriveOn()){ //DongWook
                   LOG.info("Drive On");
                   getProcessModel().setVehicleState(Vehicle.State.IDLE);
                   break;
@@ -734,7 +735,7 @@ public synchronized void enable() {
   public class MessageThread extends Thread {
       public void run() {
               try {
-            	  // localhost가 data를 보내는 port로 socket연결
+                  // localhost가 data를 보내는 port로 socket연결
                   DatagramSocket ds = new DatagramSocket(4000 + portorder);
                   while(true){
                        byte[] data = new byte[14];
@@ -750,6 +751,8 @@ public synchronized void enable() {
                        if(temp != null) {
                            recv = temp;
                        }
+                       ReadMessage rdmsg = new ReadMessage(recv);
+                       currentLocation = rdmsg.getStepNum();
                        
                        ipcheck = ipIdentify(ip); // ipcheck false일텐디?
                        LOG.info("AGV에서 온 메시지 : " + recv);
@@ -815,15 +818,24 @@ public class ReadMessage{
     
     public boolean getStateMasterOn() {
         String data = data1H1.hexTobin()+data1H2.hexTobin();
+        if(isMeidansha) {
+            return true;
+        }
         return data.charAt(7) == '1';
     }
     
     public boolean getStateTapeOn() {
+        if(isMeidansha) {
+            return true;
+        }
         String data = data1H1.hexTobin()+data1H2.hexTobin();
         return data.charAt(6) == '1';
     }
     
     public boolean getStateDriveOn() {
+        if(isMeidansha) {
+            return true;
+        }
         String data = data1H1.hexTobin()+data1H2.hexTobin();
         return data.charAt(5) == '1';
     }
@@ -836,9 +848,12 @@ public class ReadMessage{
     
     public boolean getStateStart() {
         String data = data1L1.hexTobin() + data1L2.hexTobin();
+        if(isMeidansha) {
+            data = data1H1.hexTobin() + data1H2.hexTobin();
+            return data.charAt(7) == '1';
+        }
         return data.charAt(6) == '1';
     }
-
 }
 
 // hexa형태의 string을 binary로 string으로 변형시키는 class
@@ -963,16 +978,27 @@ private class DemoTask extends CyclicTask {
             */
             
             // 지속적으로 recv를 가져와서 내용을 읽어서 agv의 상태를 acs에 전달
+            int beforeLocation = currentLocation;
             while(true) {
                 ReadMessage rdmsg = new ReadMessage(recv);
                 battery = rdmsg.getBattery();
-                int snum = rdmsg.getStepNum();
-                if(snum == beforeStepNum+1) {
-                    beforeStepNum++;
-                    LOG.info("차량 {} 이 {} 에 도착하였습니다.",getProcessModel().getName(),curStep.getDestinationPoint().getName());
-                    break;
-                    // 지금은 맵이 단순해서 직선같은것도 프로그램을 바꾸면서 가기때문에 스텝이 0과 1밖에 없어서
-                    // 굳이 beforeStepNum을 증가시키지 않아도 됨. 나중에 맵이 바뀌게 되면 증가시키시면서 업데이트 해야함.
+                
+                if(isMeidansha) {
+                    if(beforeLocation != currentLocation) {
+                        LOG.info("차량 {} 이 {} 에 도착하였습니다.",getProcessModel().getName(),curStep.getDestinationPoint().getName());
+                        beforeLocation = currentLocation;
+                        break;
+                    }
+                }
+                else {
+                    int snum = rdmsg.getStepNum();
+                    if(snum == beforeStepNum+1) {
+                        beforeStepNum++;
+                        LOG.info("차량 {} 이 {} 에 도착하였습니다.",getProcessModel().getName(),curStep.getDestinationPoint().getName());
+                        break;
+                        // 지금은 맵이 단순해서 직선같은것도 프로그램을 바꾸면서 가기때문에 스텝이 0과 1밖에 없어서
+                        // 굳이 beforeStepNum을 증가시키지 않아도 됨. 나중에 맵이 바뀌게 되면 증가시키시면서 업데이트 해야함.
+                    }
                 }
                 // 대기하는 지점을 설정해주었다. (모든 point에서 자동으로 대기 지점을 찾을 수 있도록 변경 필요)
                 if("Point-0004".equals(curStep.getSourcePoint().getName()) || "Point-0005".equals(curStep.getSourcePoint().getName())) {
@@ -1047,17 +1073,25 @@ private class DemoTask extends CyclicTask {
             InetAddress ia = InetAddress.getByName(agvip + (suffix));
             DatagramSocket ds = new DatagramSocket();
             // 출발 명령어
-            byte[] goCommand = new java.math.BigInteger("0E0000000A000100D20000000000",16).toByteArray(); // AGV 기동 명령
-            DatagramPacket dp = new DatagramPacket(goCommand,goCommand.length,ia,3000);
-            // 
-            ds.send(dp);
-            try {
+            if(isMeidansha) {
+                byte[] startOperation = new java.math.BigInteger("0E00000002000000000000000000",16).toByteArray();
+                byte[] initialOperation = new java.math.BigInteger("0E00000000000000000000000000",16).toByteArray();
+                DatagramPacket dp = new DatagramPacket(startOperation,startOperation.length,ia,3000);
+                DatagramPacket dp2 = new DatagramPacket(initialOperation,initialOperation.length,ia,3000);
+                ds.send(dp);
                 Thread.sleep(100);
+                ds.send(dp2);
             }
-            catch (InterruptedException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
+            else {
+                byte[] goCommand = new java.math.BigInteger("0E0000000A000100D20000000000",16).toByteArray(); // AGV 기동 명령
+                DatagramPacket dp = new DatagramPacket(goCommand,goCommand.length,ia,3000);
+                ds.send(dp);
             }
+            Thread.sleep(100);
+        }
+        catch (InterruptedException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
         }
         catch (IOException e) {
             e.printStackTrace();
@@ -1070,33 +1104,41 @@ private class DemoTask extends CyclicTask {
             LOG.info("goLocat1: {}",now);
             InetAddress ia = InetAddress.getByName(agvip + (suffix));
             DatagramSocket ds = new DatagramSocket();
-            byte[] programStepStrobeOnByte = new java.math.BigInteger("0E00000068000000D20000000000",16).toByteArray();
-            byte[] programStepChangeByte = new java.math.BigInteger("0E00000068000100D20000000000",16).toByteArray();
-            byte[] programStepStrobeOffByte = new java.math.BigInteger("0E00000008000100D20000000000",16).toByteArray();
-            DatagramPacket dp = new DatagramPacket(programStepStrobeOnByte,programStepStrobeOnByte.length,ia,3000);
-            DatagramPacket dp2 = new DatagramPacket(programStepChangeByte,programStepChangeByte.length,ia,30400);
-            DatagramPacket dp3 = new DatagramPacket(programStepStrobeOffByte,programStepStrobeOffByte.length,ia,3000);
-            ds.send(dp);
-            try {
+            if(isMeidansha) {
+                byte[] startOperation = new java.math.BigInteger("0E00000002000000000000000000",16).toByteArray();
+                byte[] initialOperation = new java.math.BigInteger("0E00000000000000000000000000",16).toByteArray();
+                DatagramPacket dp = new DatagramPacket(startOperation,startOperation.length,ia,3000);
+                DatagramPacket dp2 = new DatagramPacket(initialOperation,initialOperation.length,ia,3000);
+                ds.send(dp);
                 Thread.sleep(100);
+                ds.send(dp2);
             }
-            catch (InterruptedException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
+            else {
+                byte[] programStepStrobeOnByte = new java.math.BigInteger("0E00000068000000D20000000000",16).toByteArray();
+                byte[] programStepChangeByte = new java.math.BigInteger("0E00000068000100D20000000000",16).toByteArray();
+                byte[] programStepStrobeOffByte = new java.math.BigInteger("0E00000008000100D20000000000",16).toByteArray();
+                DatagramPacket dp = new DatagramPacket(programStepStrobeOnByte,programStepStrobeOnByte.length,ia,3000);
+                DatagramPacket dp2 = new DatagramPacket(programStepChangeByte,programStepChangeByte.length,ia,3000);
+                DatagramPacket dp3 = new DatagramPacket(programStepStrobeOffByte,programStepStrobeOffByte.length,ia,3000);
+                try {
+                    ds.send(dp);
+                    Thread.sleep(100);
+                    ds.send(dp2);
+                    Thread.sleep(100);
+                    ds.send(dp3);
+                } 
+                catch (IOException e) {
+                     e.printStackTrace();
+                }
             }
-            ds.send(dp2);
-            try {
-                Thread.sleep(100);
-            }
-            catch (InterruptedException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
-            ds.send(dp3);
         }
-        catch (IOException e) {
-            e.printStackTrace();
-        }
+        catch (InterruptedException e) {
+
+           e.printStackTrace();
+       }
+       catch(IOException e) {
+           e.printStackTrace();
+       }
     }
     public void goLocat2() {
         try{
@@ -1138,29 +1180,32 @@ private class DemoTask extends CyclicTask {
             LOG.info("goLocat3: {}",now);
             InetAddress ia = InetAddress.getByName(agvip + (suffix));
             DatagramSocket ds = new DatagramSocket();
-            byte[] programStepStrobeOnByte = new java.math.BigInteger("0E00000068000000D20000000000",16).toByteArray();
-            byte[] programSTepChangeByte = new java.math.BigInteger("0E00000068000200D20000000000",16).toByteArray();
-            byte[] programStepStrobeOffByte = new java.math.BigInteger("0E00000008000200D20000000000",16).toByteArray();
-            DatagramPacket dp = new DatagramPacket(programStepStrobeOnByte,programStepStrobeOnByte.length,ia,3000);
-            DatagramPacket dp2 = new DatagramPacket(programSTepChangeByte,programSTepChangeByte.length,ia,3000);
-            DatagramPacket dp3 = new DatagramPacket(programStepStrobeOffByte,programStepStrobeOffByte.length,ia,3000);
-            ds.send(dp);
-            try {
-                Thread.sleep(100);
+            if(isMeidansha) {
+                byte[] startOperation = new java.math.BigInteger("0E00000002000000000000000000",16).toByteArray();
+                byte[] initialOperation = new java.math.BigInteger("0E00000000000000000000000000",16).toByteArray();
+                DatagramPacket dp = new DatagramPacket(startOperation,startOperation.length,ia,3000);
+                DatagramPacket dp2 = new DatagramPacket(initialOperation,initialOperation.length,ia,3000);
+                ds.send(dp);
+                Thread.sleep(1000);
+                ds.send(dp2);
             }
-            catch (InterruptedException e) {
+            else {
+                byte[] programStepStrobeOnByte = new java.math.BigInteger("0E00000068000000D20000000000",16).toByteArray();
+                byte[] programSTepChangeByte = new java.math.BigInteger("0E00000068000200D20000000000",16).toByteArray();
+                byte[] programStepStrobeOffByte = new java.math.BigInteger("0E00000008000200D20000000000",16).toByteArray();
+                DatagramPacket dp = new DatagramPacket(programStepStrobeOnByte,programStepStrobeOnByte.length,ia,3000);
+                DatagramPacket dp2 = new DatagramPacket(programSTepChangeByte,programSTepChangeByte.length,ia,3000);
+                DatagramPacket dp3 = new DatagramPacket(programStepStrobeOffByte,programStepStrobeOffByte.length,ia,3000);
+                ds.send(dp);
+                Thread.sleep(100);
+                ds.send(dp2);
+                Thread.sleep(100);
+                ds.send(dp3);
+            }
+        }
+        catch (InterruptedException e) {
                 // TODO Auto-generated catch block
                 e.printStackTrace();
-            }
-            ds.send(dp2);
-            try {
-                Thread.sleep(100);
-            }
-            catch (InterruptedException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
-            ds.send(dp3);
         }
         catch (IOException e) {
             e.printStackTrace();
