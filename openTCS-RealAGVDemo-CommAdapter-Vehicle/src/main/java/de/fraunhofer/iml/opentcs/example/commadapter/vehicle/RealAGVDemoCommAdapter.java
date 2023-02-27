@@ -155,9 +155,17 @@ public class RealAGVDemoCommAdapter
     totalportorder++; // port number을 증가 시켜서 각 adapter마다 다른 포트번호를 가지도록
     suffix = totalsuffix; // totalsuffix는 static이기에 suffix에 증가시킨 값 저장
     portorder = totalportorder; // 위와 동일
-    
+    if(portorder % 2 == 0) {
+        isMeidansha = false;
+    }
     LOG.info(agvip + suffix);
     LOG.info("port: " + portorder);
+    if(isMeidansha) {
+        LOG.info(agvip + suffix + " is Meidansha");
+    }
+    else {
+        LOG.info(agvip + suffix + " is Aich");
+    }
   }
   
 
@@ -666,30 +674,32 @@ public synchronized void enable() {
                   try{
                       InetAddress ia = InetAddress.getByName(agvip + (suffix));
                       DatagramSocket ds = new DatagramSocket();
-                      byte[] stepStrobeOnByte = new java.math.BigInteger("0E000000E8000000DC0000000000",16).toByteArray();
-                      byte[] stepChangeByte = new java.math.BigInteger("0E000000E8000000DC0000000000",16).toByteArray();
-                      byte[] stepStrobeOffByte = new java.math.BigInteger("0E00000008000000DC0000000000",16).toByteArray();
-                      DatagramPacket dp = new DatagramPacket(stepStrobeOnByte,stepStrobeOnByte.length,ia,3000);
-                      DatagramPacket dp2 = new DatagramPacket(stepChangeByte,stepChangeByte.length,ia,3000);
-                      DatagramPacket dp3 = new DatagramPacket(stepStrobeOffByte,stepStrobeOffByte.length,ia,3000);
-                      ds.send(dp);
-                      try {
-                          Thread.sleep(100);
-                      }
-                      catch (InterruptedException e) {
-                          // TODO Auto-generated catch block
-                          e.printStackTrace();
-                      }
-                      ds.send(dp2);
-                      try {
-                          Thread.sleep(100);
-                      }
-                      catch (InterruptedException e) {
-                          // TODO Auto-generated catch block
-                          e.printStackTrace();
-                      }
-                      ds.send(dp3);
-                      LOG.info("step을 0으로 초기화 합니다.");
+                      if(!isMeidansha) {
+                          byte[] stepStrobeOnByte = new java.math.BigInteger("0E000000E8000000DC0000000000",16).toByteArray();
+                          byte[] stepChangeByte = new java.math.BigInteger("0E000000E8000000DC0000000000",16).toByteArray();
+                          byte[] stepStrobeOffByte = new java.math.BigInteger("0E00000008000000DC0000000000",16).toByteArray();
+                          DatagramPacket dp = new DatagramPacket(stepStrobeOnByte,stepStrobeOnByte.length,ia,3000);
+                          DatagramPacket dp2 = new DatagramPacket(stepChangeByte,stepChangeByte.length,ia,3000);
+                          DatagramPacket dp3 = new DatagramPacket(stepStrobeOffByte,stepStrobeOffByte.length,ia,3000);
+                          ds.send(dp);
+                          try {
+                              Thread.sleep(100);
+                          }
+                          catch (InterruptedException e) {
+                              // TODO Auto-generated catch block
+                              e.printStackTrace();
+                          }
+                          ds.send(dp2);
+                          try {
+                              Thread.sleep(100);
+                          }
+                         catch (InterruptedException e) {
+                              // TODO Auto-generated catch block
+                              e.printStackTrace();
+                          }
+                          ds.send(dp3);
+                          LOG.info("step을 0으로 초기화 합니다.");
+                       }
                   }
                   catch (IOException e) {
                       e.printStackTrace();
@@ -1066,10 +1076,10 @@ private class DemoTask extends CyclicTask {
     // nextpoint를 어떻게 가져올 것인지 찾아야함... 
     public void goCommand() {
         while(nextPoint.getOccupyingVehicle() != null) { // next point가 free가 아니면 계속 기다림
-            LOG.info("--------------------------{} occupying point {}----------------------",nextPoint.getOccupyingVehicle().getName(), nextPoint.getName());
+            LOG.info("\n\n\n\n-----------------{} occupying point {}--------------\n\n\n",nextPoint.getOccupyingVehicle().getName(), nextPoint.getName());
         }
         try{  //free가 되면
-            LOG.info("---------Next Point is {} , Current point is {}---------",nextPoint.getName(), currentPoint.getName());
+            LOG.info("\n\n\n\n---Next Point is {} , Current point is {}----\n\n\n\n",nextPoint.getName(), currentPoint.getName());
             InetAddress ia = InetAddress.getByName(agvip + (suffix));
             DatagramSocket ds = new DatagramSocket();
             // 출발 명령어
@@ -1101,7 +1111,7 @@ private class DemoTask extends CyclicTask {
     public void goLocat1() {
         try{
             LocalTime now = LocalTime.now();
-            LOG.info("goLocat1: {}",now);
+            LOG.info("\n\n\n\n\n\ngoLocat1: {}\n\n\n\n\n\n\n\n",now);
             InetAddress ia = InetAddress.getByName(agvip + (suffix));
             DatagramSocket ds = new DatagramSocket();
             if(isMeidansha) {
@@ -1109,8 +1119,10 @@ private class DemoTask extends CyclicTask {
                 byte[] initialOperation = new java.math.BigInteger("0E00000000000000000000000000",16).toByteArray();
                 DatagramPacket dp = new DatagramPacket(startOperation,startOperation.length,ia,3000);
                 DatagramPacket dp2 = new DatagramPacket(initialOperation,initialOperation.length,ia,3000);
-                ds.send(dp);
                 Thread.sleep(100);
+                ds.send(dp);
+                LOG.info("send order");
+                Thread.sleep(500);
                 ds.send(dp2);
             }
             else {
@@ -1143,7 +1155,7 @@ private class DemoTask extends CyclicTask {
     public void goLocat2() {
         try{
             LocalTime now = LocalTime.now();
-            LOG.info("goLocat2: {}",now);
+            LOG.info("\n\n\n\n\n\ngoLocat2: {}\n\n\n\n\n\n\n\n",now);
             InetAddress ia = InetAddress.getByName(agvip + (suffix));
             DatagramSocket ds = new DatagramSocket();
             byte[] programStepStrobeOnByte = new java.math.BigInteger("0E00000068000000D20000000000",16).toByteArray();
@@ -1177,7 +1189,7 @@ private class DemoTask extends CyclicTask {
     public void goLocat3() {
         try{
             LocalTime now = LocalTime.now();
-            LOG.info("goLocat3: {}",now);
+            LOG.info("\n\n\n\n\n\ngoLocat3: {}\n\n\n\n\n\n\n\n",now);
             InetAddress ia = InetAddress.getByName(agvip + (suffix));
             DatagramSocket ds = new DatagramSocket();
             if(isMeidansha) {
@@ -1185,8 +1197,10 @@ private class DemoTask extends CyclicTask {
                 byte[] initialOperation = new java.math.BigInteger("0E00000000000000000000000000",16).toByteArray();
                 DatagramPacket dp = new DatagramPacket(startOperation,startOperation.length,ia,3000);
                 DatagramPacket dp2 = new DatagramPacket(initialOperation,initialOperation.length,ia,3000);
+                Thread.sleep(100);
                 ds.send(dp);
-                Thread.sleep(1000);
+                LOG.info("send order");
+                Thread.sleep(500);
                 ds.send(dp2);
             }
             else {
@@ -1214,7 +1228,7 @@ private class DemoTask extends CyclicTask {
     public void goLocat4() {  // location4로 가는 함수 -> agv에 location4로 가는 명령어를 보낸다.
         try{
             LocalTime now = LocalTime.now();
-            LOG.info("goLocat4: {}",now);
+            LOG.info("\n\n\ngoLocat4: {}\n\n\n",now);
             InetAddress ia = InetAddress.getByName(agvip + (suffix));
             DatagramSocket ds = new DatagramSocket();
             byte[] programStepStrobeOnByte = new java.math.BigInteger("0E00000068000000D20000000000",16).toByteArray();
