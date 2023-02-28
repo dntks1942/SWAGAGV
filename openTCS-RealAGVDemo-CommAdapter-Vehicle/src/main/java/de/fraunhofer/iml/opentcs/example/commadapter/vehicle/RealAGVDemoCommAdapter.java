@@ -122,14 +122,14 @@ public class RealAGVDemoCommAdapter
   // 각각의 agv에 정보가 localhost가 보낸 port로 온다. port를 구분하기 위해서
   static int totalportorder = 0;
   
-  private char suffix;
-  private int portorder;
+  private char suffix; // 주소를 설정하기 위한 변수
+  private int portorder; // port를 설정하기 위한 변수
   boolean ipcheck;
   String recv = "test";
   private static final int ADVANCE_TIME = 100;
   private CyclicTask demoTask;
-  boolean canChange = true;
-  boolean isMeidansha = true;
+  boolean canChange = true; // Load, Unload 상태 표현
+  boolean isMeidansha = true; // 메이덴샤AGV인지 아이치AGV인지를 구별하기 위한 변수
   int currentLocation = 0;
 
   /**
@@ -155,9 +155,12 @@ public class RealAGVDemoCommAdapter
     totalportorder++; // port number을 증가 시켜서 각 adapter마다 다른 포트번호를 가지도록
     suffix = totalsuffix; // totalsuffix는 static이기에 suffix에 증가시킨 값 저장
     portorder = totalportorder; // 위와 동일
+    
+    // 현재는 포트가 짝수이면 아이치 아니면 메이덴샤이다.
     if(portorder % 2 == 0) {
         isMeidansha = false;
     }
+    
     LOG.info(agvip + suffix);
     LOG.info("port: " + portorder);
     if(isMeidansha) {
@@ -950,42 +953,6 @@ private class DemoTask extends CyclicTask {
             final Step curStep = curCommand.getStep();
             currentPoint = curStep.getSourcePoint();
             nextPoint = curStep.getDestinationPoint();
-            /*  picar code
-            int msg;
-            // LRF 계산부분
-            
-            long curPx = currentPoint.getPosition().getX();
-            long curPy= currentPoint.getPosition().getY();
-            long nxtPx= nextPoint.getPosition().getX();
-            long nxtPy= nextPoint.getPosition().getY();
-            long curXd = nxtPx-curPx;
-            long curYd = nxtPy-curPy;
-            nextAngle = Math.atan2(curYd, curXd);
-            nextAngle = Math.toDegrees(nextAngle);
-            double angleDiff = nextAngle-curAngle; //각도 구하기 
-            
-            if((angleDiff>80 && angleDiff<100) || (angleDiff>-280 && angleDiff<-260)) {
-                msg = 2; //left
-            }
-            else if((angleDiff<-80 && angleDiff>-100) || (angleDiff>260 && angleDiff<280)) {
-                msg = 1; //right
-            }
-            else {
-                msg = 0; //forward
-            }
-            
-            //원래 이 다음에 메시지 전송 부분이었음
-            if(msg == 2){
-                LOG.info("차량 {} 에 좌회전 명령을 보냅니다.",getProcessModel().getName());
-            }
-            else if(msg ==1){
-                LOG.info("차량 {} 에 우회전 명령을 보냅니다.",getProcessModel().getName());
-            }
-            else {
-                LOG.info("차량 {} 에 직진 명령을 보냅니다.",getProcessModel().getName());
-            }
-            //그 다음에 메시지 수신 부분이었음
-            */
             
             // 지속적으로 recv를 가져와서 내용을 읽어서 agv의 상태를 acs에 전달
             int beforeLocation = currentLocation;
@@ -1108,27 +1075,29 @@ private class DemoTask extends CyclicTask {
         }
     }
     
+    //Location-0001로 갈 때 수행하는 명령
     public void goLocat1() {
         try{
             LocalTime now = LocalTime.now();
             LOG.info("\n\n\n\n\n\ngoLocat1: {}\n\n\n\n\n\n\n\n",now);
             InetAddress ia = InetAddress.getByName(agvip + (suffix));
             DatagramSocket ds = new DatagramSocket();
-            if(isMeidansha) {
-                byte[] startOperation = new java.math.BigInteger("0E00000002000000000000000000",16).toByteArray();
-                byte[] initialOperation = new java.math.BigInteger("0E00000000000000000000000000",16).toByteArray();
+            
+            if(isMeidansha) { //메이덴샤 AGV일 때
+                byte[] startOperation = new java.math.BigInteger("0E00000002000000000000000000",16).toByteArray(); // 기동 명령
+                byte[] initialOperation = new java.math.BigInteger("0E00000000000000000000000000",16).toByteArray(); // 초기화
                 DatagramPacket dp = new DatagramPacket(startOperation,startOperation.length,ia,3000);
                 DatagramPacket dp2 = new DatagramPacket(initialOperation,initialOperation.length,ia,3000);
-                Thread.sleep(100);
+                
                 ds.send(dp);
                 LOG.info("send order");
-                Thread.sleep(500);
+                Thread.sleep(100);
                 ds.send(dp2);
             }
-            else {
-                byte[] programStepStrobeOnByte = new java.math.BigInteger("0E00000068000000D20000000000",16).toByteArray();
-                byte[] programStepChangeByte = new java.math.BigInteger("0E00000068000100D20000000000",16).toByteArray();
-                byte[] programStepStrobeOffByte = new java.math.BigInteger("0E00000008000100D20000000000",16).toByteArray();
+            else { //아이치 AGV일 때
+                byte[] programStepStrobeOnByte = new java.math.BigInteger("0E00000068000000D20000000000",16).toByteArray(); //스트로브 온 
+                byte[] programStepChangeByte = new java.math.BigInteger("0E00000068000100D20000000000",16).toByteArray();   // 기동 명령
+                byte[] programStepStrobeOffByte = new java.math.BigInteger("0E00000008000100D20000000000",16).toByteArray(); // 스트로브 오프
                 DatagramPacket dp = new DatagramPacket(programStepStrobeOnByte,programStepStrobeOnByte.length,ia,3000);
                 DatagramPacket dp2 = new DatagramPacket(programStepChangeByte,programStepChangeByte.length,ia,3000);
                 DatagramPacket dp3 = new DatagramPacket(programStepStrobeOffByte,programStepStrobeOffByte.length,ia,3000);
@@ -1152,6 +1121,7 @@ private class DemoTask extends CyclicTask {
            e.printStackTrace();
        }
     }
+  //Location-0002로 갈 때 수행하는 명령
     public void goLocat2() {
         try{
             LocalTime now = LocalTime.now();
@@ -1186,6 +1156,8 @@ private class DemoTask extends CyclicTask {
             e.printStackTrace();
         }
     }
+    
+  //Location-0003로 갈 때 수행하는 명령
     public void goLocat3() {
         try{
             LocalTime now = LocalTime.now();
@@ -1197,10 +1169,9 @@ private class DemoTask extends CyclicTask {
                 byte[] initialOperation = new java.math.BigInteger("0E00000000000000000000000000",16).toByteArray();
                 DatagramPacket dp = new DatagramPacket(startOperation,startOperation.length,ia,3000);
                 DatagramPacket dp2 = new DatagramPacket(initialOperation,initialOperation.length,ia,3000);
-                Thread.sleep(100);
                 ds.send(dp);
                 LOG.info("send order");
-                Thread.sleep(500);
+                Thread.sleep(100);
                 ds.send(dp2);
             }
             else {
@@ -1225,6 +1196,7 @@ private class DemoTask extends CyclicTask {
             e.printStackTrace();
         }
     }
+  //Location-0004로 갈 때 수행하는 명령
     public void goLocat4() {  // location4로 가는 함수 -> agv에 location4로 가는 명령어를 보낸다.
         try{
             LocalTime now = LocalTime.now();
